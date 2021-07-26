@@ -1,18 +1,6 @@
-﻿# はじめ方
+﻿# 概要
 
-先ずインターネットに繋がっていることを確認。
-
-## stackのインストール
-
-以下のURLから`stack`をインストールする。
-
-<https://docs.haskellstack.org/en/stable/install_and_upgrade/#windows>
-
-## `Git for Windows`のインストール
-
-以下のURLから`Git for Windows`をインストールする。
-
-<https://git-for-windows.github.io/>
+FizzBuzz　プログラム
 
 ## Haskellを開始する！
 
