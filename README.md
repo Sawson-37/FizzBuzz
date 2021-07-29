@@ -4,6 +4,8 @@ FizzBuzz　プログラム
 
 ## Haskellを開始する！
 
+変更
+
 Git bashから下記のコマンドを実行する。
 
 ~~~
