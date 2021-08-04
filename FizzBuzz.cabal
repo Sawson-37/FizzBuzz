@@ -24,7 +24,7 @@ library
 executable fizzbuzz
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       base, FizzBuzz, diagrams, diagrams-svg, diagrams-lib
+  build-depends:       base, FizzBuzz, directory, filepath
 --  ghc-options:         -threaded -Werror -Wall
   default-extensions:  StrictData
 --  other-extensions:    NoImplicitPrelude
