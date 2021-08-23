@@ -17,15 +17,17 @@ library
   exposed-modules:     Lib
   build-depends:       base
 --  ghc-options:         -Werror -Wall
-  default-extensions:  StrictData
+  default-extensions:  StrictData, DeriveGeneric, DeriveAnyClass
+  -- ↑おまじない
 --   other-extensions:    NoImplicitPrelude
   default-language:    Haskell2010
 
 executable fizzbuzz
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       base, FizzBuzz, directory, filepath
+  build-depends:       base, FizzBuzz, directory, filepath, containers, array ,bytestring ,cereal　,network
 --  ghc-options:         -threaded -Werror -Wall
   default-extensions:  StrictData
 --  other-extensions:    NoImplicitPrelude
+  default-extensions:  StrictData, DeriveGeneric, DeriveAnyClass
   default-language:    Haskell2010
