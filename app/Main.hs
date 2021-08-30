@@ -22,11 +22,14 @@ import GHC.Generics (Generic)
 import Network.Socket (Socket, SockAddr)
 import qualified Network.Socket as N 
 import qualified Network.Socket.ByteString as N (recv, sendTo, send)
+import Control.Concurrent(forkIO, threadDelay, killThread)
+import System.Timeout(timeout)
 
 {-
 ネットワークの送受信は、初めにソケットを送信してからそれに
 daiagrams　→　UDP
 -}
+
 
 data Gender
    = Male
@@ -39,12 +42,20 @@ data Person = Person -- ※　
    } 
    deriving (Show, Generic, Serialize)
 
-meibo  :: [Person]
-meibo = 
+meibo1  :: [Person]
+meibo1 = 
    [Person "Fujinaga" Male
    ,Person "Sawamura" Female
    ,Person "Sakari" Male
    ]
+
+meibo2  :: [Person]
+meibo2 = 
+   [Person "Aizawa" Male
+   ,Person "Sugiura" Female
+   ,Person "Kinjou" Male
+   ]
+
 
 data TrackID
      = T801A
@@ -54,7 +65,22 @@ data TrackID
      | T802B
      | T803B
          deriving(Show, Eq, Ord, Ix, Enum, Bounded)
-        
+
+main :: IO()
+main = do
+   --timeout 2 $ mapM_ putStrLn $ repeat "2"
+   putStrLn "終了します"
+
+timeout
+ :: Int -- 秒
+ -> IO() 
+ -> IO()
+timeout time action = do
+   threadID <- forkIO action
+   threadDelay $ time * 1000000
+   killThread threadID
+
+
 {-
    -- B.writeFile "Meibo" $ encode meibo
    bstr <- B.readFile "C:/Users/anura/Desktop/FizzBuzz/syain_meibo"
@@ -70,8 +96,6 @@ data TrackID
    --let meibo:: [Person]
    --    maibo = decode bstr
    --bstr <- B.readFile "C:/Users/anura/ByteString.txt"
-main :: IO ()
-main = mainTCPReceiver
 
 openSockTCPServer
     :: String -- ^ Port number or name; 514 is default
@@ -117,33 +141,39 @@ mainTCPReceiver = do
 mainTCPSender = do
     sock <- openSockTCPClient  "172.21.102.5" "60002" -- ブロードキャスト　IPアドレス　ポート番号
     -- 並列処理が関わってくる
-    N.send sock $ encode meibo
+    N.send sock $ encode meibo1
     -- ソケット　バイト列の情報(ByteString)
     N.close sock
 
 
 
 --UDP受信
-mainUdpReceiver = do
-    sock <- openSockUdpReceiver "60001"　-- ポート番号のみ(受ける側)
-    let loop = do
-            bstr <- N.recv sock 1472 -- イーサネットの最大フレーム長　(UDPの場合、イーサネットのフレーム長を超えるとパソケットがばらける) 
-            -- ブロッキング状態　：　何も受信しなければ処理が止まる(タイムアウトさせるか、手動で終わらせる)
-            case decode bstr :: Either String [Person] of
-                Right meibo -> do
-                    putStrLn $　"受信しました"
-                    putStrLn $ show meibo                   
-                    loop
-                Left err -> do
-                    putStrLn err
-                    putStrLn "Exitting"
-                    N.close sock
-    loop
+mainClient :: [Person] -> IO()
+mainClient meibo = do
+   --　ソケットを生成する
+   sockRsv <- openSockUdpReceiver "60002"　-- ポート番号のみ(受ける側)
+   (sockSnd,addr) <- openSockUdpSender False "172.21.102.5" "60001" -- ブロードキャスト　IPアドレス　ポート番号
+   --　最初の名簿を送信する
+   putStrLn $　"送信します"
+   N.sendTo sockSnd (encode meibo) addr 
+   putStrLn $　show meibo
+   --受信する
+   bstr <- N.recv sockRsv 1472 -- イーサネットの最大フレーム長　(UDPの場合、イーサネットのフレーム長を超えるとパソケットがばらける) 
+   -- ブロッキング状態　：　何も受信しなければ処理が止まる(タイムアウトさせるか、手動で終わらせる)
+   case decode bstr :: Either String [Person] of
+      Right receivedMeibo -> do -- シャドーイング：これまでに出ていた名簿を上書きしてる
+         putStrLn $　"受信しました"
+         putStrLn $ show receivedMeibo   --　標準出力                         
+      Left err -> do
+         putStrLn err
+         putStrLn "Exitting"
+   N.close sockRsv -- ソケットを閉じる
+   N.close sockSnd
 
 --UDP送信
 mainUDPSender = do
     (sock,addr) <- openSockUdpSender False "172.21.102.5" "60001" -- ブロードキャスト　IPアドレス　ポート番号
-    N.sendTo sock (encode meibo) addr 
+    N.sendTo sock (encode meibo1) addr 
     -- ソケット　バイト列の情報(ByteString)
     N.close sock
 
