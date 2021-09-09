@@ -1,8 +1,7 @@
-
-
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 import System.Directory (listDirectory, doesFileExist)
 import Text.Read(readMaybe)
-import System.IO
+import System.IO ()
 import System.FilePath(takeExtension ,(</>))
 import System.Environment(getArgs)
 import Data.List(isInfixOf)
@@ -16,20 +15,32 @@ import Data.Array.IArray (amap, Ix)
 import Data.Char (toUpper)
 import Data.Word (Word8, Word16, Word32, Word64)
 import Data.ByteString (ByteString) -- ファイルの読み書き、サーバに流すとき　Word8の配列　メモリそのものを表現するときにも使用する
-import qualified Data.ByteString as B (readFile, writeFile)　--　エンコードでコードのことをシリアライゼーション
-import Data.Serialize
+import qualified Data.ByteString as B (readFile, writeFile) --　エンコードでコードのことをシリアライゼーション
+import Data.Serialize ( decode, encode, Serialize )
 import GHC.Generics (Generic)
 import Network.Socket (Socket, SockAddr)
-import qualified Network.Socket as N 
+import qualified Network.Socket as N
 import qualified Network.Socket.ByteString as N (recv, sendTo, send)
 import Control.Concurrent(forkIO, threadDelay, killThread)
 import System.Timeout(timeout)
+import Control.Exception.Safe (catch, handle, try, throwString, bracket, SomeException)
 
 {-
 ネットワークの送受信は、初めにソケットを送信してからそれに
 daiagrams　→　UDP
 -}
 
+main :: IO()
+main = do
+   let errorHandler :: SomeException -> IO()
+       errorHandler err = putStrLn $ show err
+ --handle errorHandler $ do     
+   throwString "Error thown!"
+   putStrLn  "Hello"
+   putStrLn  "ApplicationEND!"
+
+
+      
 
 data Gender
    = Male
@@ -39,18 +50,18 @@ data Gender
 data Person = Person -- ※　
    { personName :: String
    , personHender :: Gender
-   } 
+   }
    deriving (Show, Generic, Serialize)
 
 meibo1  :: [Person]
-meibo1 = 
+meibo1 =
    [Person "Fujinaga" Male
    ,Person "Sawamura" Female
    ,Person "Sakari" Male
    ]
 
 meibo2  :: [Person]
-meibo2 = 
+meibo2 =
    [Person "Aizawa" Male
    ,Person "Sugiura" Female
    ,Person "Kinjou" Male
@@ -66,14 +77,14 @@ data TrackID
      | T803B
          deriving(Show, Eq, Ord, Ix, Enum, Bounded)
 
-main :: IO()
-main = do
+--main :: IO()
+--main = do
    --timeout 2 $ mapM_ putStrLn $ repeat "2"
-   putStrLn "終了します"
+--   putStrLn "終了します"
 
 timeout
  :: Int -- 秒
- -> IO() 
+ -> IO()
  -> IO()
 timeout time action = do
    threadID <- forkIO action
@@ -92,7 +103,7 @@ timeout time action = do
          putStrLn "Decode Error!"
          putStrLn err
 -}
-   
+
    --let meibo:: [Person]
    --    maibo = decode bstr
    --bstr <- B.readFile "C:/Users/anura/ByteString.txt"
@@ -122,14 +133,14 @@ openSockTCPClient hostname port = do
 
 --TCP受信
 mainTCPReceiver = do
-    sock <- openSockTCPServer "60001"　-- ポート番号のみ(受ける側)
+    sock <- openSockTCPServer "60001" -- ポート番号のみ(受ける側)
     let loop = do
             bstr <- N.recv sock 1472 -- イーサネットの最大フレーム長　(UDPの場合、イーサネットのフレーム長を超えるとパソケットがばらける) 
             -- ブロッキング状態　：　何も受信しなければ処理が止まる(タイムアウトさせるか、手動で終わらせる)
             case decode bstr :: Either String [Person] of
                 Right maibo -> do
-                    putStrLn $ show maibo
-                    
+                    print maibo
+
                     loop
                 Left err -> do
                     putStrLn err
@@ -151,18 +162,19 @@ mainTCPSender = do
 mainClient :: [Person] -> IO()
 mainClient meibo = do
    --　ソケットを生成する
-   sockRsv <- openSockUdpReceiver "60002"　-- ポート番号のみ(受ける側)
+   sockRsv <- openSockUdpReceiver "60002" -- ポート番号のみ(受ける側)
+
    (sockSnd,addr) <- openSockUdpSender False "172.21.102.5" "60001" -- ブロードキャスト　IPアドレス　ポート番号
    --　最初の名簿を送信する
-   putStrLn $　"送信します"
-   N.sendTo sockSnd (encode meibo) addr 
-   putStrLn $　show meibo
+   putStrLn $ "送信します"
+   N.sendTo sockSnd (encode meibo) addr
+   putStrLn $ show meibo
    --受信する
    bstr <- N.recv sockRsv 1472 -- イーサネットの最大フレーム長　(UDPの場合、イーサネットのフレーム長を超えるとパソケットがばらける) 
    -- ブロッキング状態　：　何も受信しなければ処理が止まる(タイムアウトさせるか、手動で終わらせる)
    case decode bstr :: Either String [Person] of
       Right receivedMeibo -> do -- シャドーイング：これまでに出ていた名簿を上書きしてる
-         putStrLn $　"受信しました"
+         putStrLn $ "受信しました"
          putStrLn $ show receivedMeibo   --　標準出力                         
       Left err -> do
          putStrLn err
@@ -171,11 +183,21 @@ mainClient meibo = do
    N.close sockSnd
 
 --UDP送信
-mainUDPSender = do
-    (sock,addr) <- openSockUdpSender False "172.21.102.5" "60001" -- ブロードキャスト　IPアドレス　ポート番号
-    N.sendTo sock (encode meibo1) addr 
+
+
+withUdpSendSoket 
+   :: String 
+   -> String 
+   -> ((Socket, SockAddr) -> IO())
+   -> IO()
+withUdpSendSoket addr port = bracket (openSockUdpSender False addr port) (N.close . fst) -- "172.21.102.5" "60001" -- ブロードキャスト　IPアドレス　ポート番号
+
+mainUDPSender = withUdpSendSoket "172.21.102.5" "60001" $ \(sock, addr) 
+   -> do
+      N.sendTo sock (encode meibo1) addr
+      return ()
     -- ソケット　バイト列の情報(ByteString)
-    N.close sock
+    -- N.close sock 
 
 openSockUdpReceiver
     :: String -- ^ Port number or name
@@ -206,23 +228,23 @@ openSockUdpSender isBroadCast addr port = do
 safeArray :: (Ix i, Enum i, Bounded i) => e -> [(i,e)] -> Array i e
 safeArray def list = A.accumArray (\ e a -> a ) def (minBound, maxBound) list
 
-someArray4 :: Array TrackID String 
+someArray4 :: Array TrackID String
 someArray4 = safeArray "" $ map indexToPair [minBound .. maxBound]
  where indexToPair :: TrackID -> (TrackID, String)
        indexToPair i = (i, show i)
 
 someArray3 :: Array Int String
-someArray3 = amap (map toUpper) someArray2 
+someArray3 = amap (map toUpper) someArray2
 
 -- toUpper は　Charなので　mapが必要
 
 someArray2 :: Array Int String
-someArray2 = someArray // [(1,"abc"),(30,"def")] 
+someArray2 = someArray // [(1,"abc"),(30,"def")]
 
 
 
 someArray :: Array Int String
-someArray = A.array (0,100) $ map indexToPair[0..100] 
+someArray = A.array (0,100) $ map indexToPair[0..100]
  where indexToPair :: Int -> (Int, String)
        indexToPair i = (i, show i)
 
@@ -233,7 +255,7 @@ deleteDuplicateAndSort = S.toList . S.fromList
 -- (1, 'a'), (2, 'c'), (1, 'b'), (3, 'd'), (4, 'e'), (3, 'f')
 groupMap :: Ord k => [(k, a)] -> Map k [a]
 groupMap [] = M.fromList []
-groupMap ((k, x): xs) = 
+groupMap ((k, x): xs) =
    M.insertWith (++) k [x] mp
  where mp = groupMap xs
 

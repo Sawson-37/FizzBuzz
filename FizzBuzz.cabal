@@ -25,7 +25,16 @@ library
 executable fizzbuzz
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       base, FizzBuzz, directory, filepath, containers, array ,bytestring ,cereal　,network
+  build-depends:       base
+                     , FizzBuzz
+                     , directory
+                     , filepath
+                     , containers
+                     , array
+                     , bytestring 
+                     , cereal　
+                     , network 
+                     , safe-exceptions
 --  ghc-options:         -threaded -Werror -Wall
   default-extensions:  StrictData
 --  other-extensions:    NoImplicitPrelude
